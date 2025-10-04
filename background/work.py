@@ -9,6 +9,8 @@ from handlers.ai_client import get_ai_client
 from PIL import Image
 from io import BytesIO
 import traceback
+import requests
+import os
 
 def process_tattoo_task(message: dict):
     """
@@ -144,7 +146,16 @@ def process_tattoo_task(message: dict):
         print(f"   • Tamaño resultado: {len(result_bytes)} bytes")
         print(f"   • Resolución: {width}x{height}")
         print(f"{'='*70}\n")
-            
+
+        # Enviar notificación de éxito al webhook si está configurado
+        webhook_url = os.getenv('WEBHOOK_URL')
+        if webhook_url:
+            try:
+                response = requests.post(webhook_url, json={"success": "ok"})
+                print(f"✅ Notificación enviada a {webhook_url}")
+            except Exception as e:
+                print(f"⚠️  Error enviando notificación: {e}")
+
     except Exception as e:
         print(f"\n{'='*70}")
         print(f"❌ ERROR FATAL AL PROCESAR TAREA")

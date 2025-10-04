@@ -402,23 +402,3 @@ def purge_queue():
             status_code=500,
             detail=f"Error al purgar la cola: {str(e)}"
         )
-    """Elimina todos los mensajes pendientes de la cola."""
-    try:
-        rabbitmq_client = get_rabbitmq_client()
-        result = rabbitmq_client.purge_queue()
-        
-        if result:
-            return {
-                "status": "success",
-                "message": "Cola purgada exitosamente"
-            }
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="No se pudo purgar la cola"
-            )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al purgar la cola: {str(e)}"
-        )
