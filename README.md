@@ -1,12 +1,12 @@
 # Tatto-IA: Aplicación de Tatuajes con Inteligencia Artificial
 
-Sistema web para aplicar diseños de tatuajes en fotos de cuerpos utilizando Reve API. El proyecto utiliza una arquitectura de microservicios con FastAPI, RabbitMQ para colas de mensajes, MinIO para almacenamiento de objetos y un worker que procesa las imágenes con IA.
+Sistema web para aplicar diseños de tatuajes en fotos de cuerpos utilizando Reve API. El proyecto utiliza una arquitectura de microservicios con FastAPI, RabbitMQ para colas de mensajes, Cloudinary para almacenamiento de objetos y un worker que procesa las imágenes con IA.
 
 ## 🚀 Características
 
 - **API REST**: FastAPI para recepción de imágenes y gestión de archivos
 - **Procesamiento Asíncrono**: RabbitMQ para encolado de tareas
-- **Almacenamiento**: MinIO para gestión de imágenes
+- **Almacenamiento**: Cloudinary para gestión de imágenes
 - **IA Avanzada**: Reve API para aplicación realista de tatuajes
 - **Arquitectura Escalable**: Separación entre API, worker y servicios externos
 
@@ -33,18 +33,10 @@ pip install -r requirements.txt
 
 ### 3. Configurar servicios externos
 
-#### MinIO (Almacenamiento de objetos)
-```bash
-# Usando Docker
-docker run -d \
-  -p 9000:9000 \
-  -p 9090:9090 \
-  --name minio \
-  -e "MINIO_ACCESS_KEY=minioadmin" \
-  -e "MINIO_SECRET_KEY=minioadmin" \
-  -v ~/minio/data:/data \
-  quay.io/minio/minio server /data --console-address ":9090"
-```
+#### Cloudinary (Almacenamiento de objetos)
+- Crea una cuenta en [Cloudinary](https://cloudinary.com)
+- Obtén tu `cloud_name`, `api_key` y `api_secret` del dashboard
+- Configura estas credenciales en el archivo `.env`
 
 #### RabbitMQ (Sistema de colas)
 ```bash
@@ -69,10 +61,10 @@ cp .env .env.local
 Edita `.env.local` con tus configuraciones:
 
 ```env
-# MinIO
-MINIO_URL=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+# Cloudinary
+CLOUDINARY_CLOUD_NAME=tu_cloud_name
+CLOUDINARY_API_KEY=tu_api_key
+CLOUDINARY_API_SECRET=tu_api_secret
 
 # RabbitMQ
 RABBITMQ_HOST=localhost
@@ -105,10 +97,18 @@ python worker/work.py
 ### Opción 2: Usar Docker Compose (recomendado para desarrollo)
 
 ```bash
-# Crear archivo docker-compose.yml con todos los servicios
-# Luego ejecutar:
-docker-compose up -d
+# Ejecutar todos los servicios
+docker-compose up --build
+
+# O en segundo plano:
+docker-compose up -d --build
 ```
+
+#### Configurar carpetas en Cloudinary
+
+Cloudinary crea automáticamente las carpetas cuando subes archivos. Las carpetas utilizadas son:
+   - `input-images` (para imágenes de entrada)
+   - `output-images` (para resultados procesados)
 
 ## 📖 Uso de la API
 
@@ -156,7 +156,7 @@ GET /queue/status
 ```
 Cliente HTTP ──► FastAPI Server
                       │
-                      ├─► MinIO (Almacenamiento)
+                      ├─► Cloudinary (Almacenamiento)
                       │
                       └─► RabbitMQ ──► Worker
                                         │
@@ -167,10 +167,10 @@ Cliente HTTP ──► FastAPI Server
 
 1. **Recepción**: API recibe dos imágenes vía POST
 2. **Validación**: Verifica formatos y tipos de archivo
-3. **Almacenamiento**: Sube imágenes a MinIO buckets
+3. **Almacenamiento**: Sube imágenes a Cloudinary
 4. **Encolado**: Envía tarea a RabbitMQ
 5. **Procesamiento**: Worker descarga imágenes y aplica IA
-6. **Resultado**: Guarda imagen procesada en MinIO
+6. **Resultado**: Guarda imagen procesada en Cloudinary
 
 ## 🔧 Desarrollo
 
@@ -179,11 +179,11 @@ Cliente HTTP ──► FastAPI Server
 ```
 tatto-ia/
 ├── main.py                 # API principal FastAPI
-├── worker/
+├── background/
 │   └── work.py            # Worker de procesamiento
 ├── handlers/
 │   ├── ai_client.py       # Cliente para Reve API
-│   ├── minio_client.py    # Cliente para MinIO
+│   ├── cloudinary_client.py # Cliente para Cloudinary
 │   └── rabbitmq_client.py # Cliente para RabbitMQ
 ├── .env                    # Variables de entorno
 ├── .gitignore             # Archivos ignorados por Git
@@ -198,9 +198,9 @@ tatto-ia/
 
 ## 🐛 Solución de problemas
 
-### Error de conexión a MinIO
-- Verificar que MinIO esté ejecutándose en el puerto 9000
-- Comprobar credenciales en `.env`
+### Error de conexión a Cloudinary
+- Verificar que las credenciales de Cloudinary sean correctas en `.env`
+- Comprobar que la cuenta de Cloudinary esté activa
 
 ### Error de conexión a RabbitMQ
 - Verificar que RabbitMQ esté ejecutándose en el puerto 5672

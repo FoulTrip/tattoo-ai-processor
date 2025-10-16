@@ -161,6 +161,61 @@ class RabbitMQClient:
     ):
         """
         Consume mensajes de la cola de forma continua.
+
+        Args:
+            callback: Función que se ejecutará por cada mensaje recibido
+            auto_ack: Si True, confirma automáticamente los mensajes
+        """
+        try:
+            self._ensure_connection()
+
+            if self.channel is None:
+                raise Exception("No se pudo establecer conexión con RabbitMQ")
+
+            def wrapper_callback(ch, method, properties, body):
+                try:
+                    # Decodificar el mensaje JSON
+                    message = json.loads(body.decode('utf-8'))
+                    print(f"📥 Mensaje recibido: {message}")
+
+                    # Ejecutar el callback del usuario
+                    callback(message)
+
+                    # Confirmar el mensaje si no es auto_ack
+                    if not auto_ack:
+                        ch.basic_ack(delivery_tag=method.delivery_tag)
+
+                except json.JSONDecodeError as e:
+                    print(f"❌ Error al decodificar mensaje: {e}")
+                    if not auto_ack:
+                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                except Exception as e:
+                    print(f"❌ Error al procesar mensaje: {e}")
+                    if not auto_ack:
+                        # Reencolar el mensaje para reintentarlo
+                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+
+            # Configurar QoS: procesar un mensaje a la vez
+            self.channel.basic_qos(prefetch_count=1)
+
+            # Comenzar a consumir
+            self.channel.basic_consume(
+                queue=self.queue_name,
+                on_message_callback=wrapper_callback,
+                auto_ack=auto_ack
+            )
+
+            print(f"🔄 Esperando mensajes en la cola '{self.queue_name}'. Presiona CTRL+C para salir.")
+            self.channel.start_consuming()
+
+        except KeyboardInterrupt:
+            print("\n⏹️  Deteniendo consumidor...")
+            self.stop_consuming()
+        except Exception as e:
+            print(f"❌ Error al consumir mensajes: {e}")
+            raise
+        """
+        Consume mensajes de la cola de forma continua.
         
         Args:
             callback: Función que se ejecutará por cada mensaje recibido

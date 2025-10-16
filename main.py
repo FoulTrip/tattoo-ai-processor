@@ -1,21 +1,21 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from PIL import Image
 from io import BytesIO
-from minio.error import S3Error
-from handlers.minio_client import get_minio_client
+from handlers.cloudinary_client import get_cloudinary_client
 from handlers.rabbitmq_client import get_rabbitmq_client
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 import os
 from uuid import uuid4
+from typing import Optional
 
 
 # Cargar variables de entorno
 load_dotenv()
 
-# Nombre de los buckets
-INPUT_BUCKET = os.getenv("INPUT_BUCKET", "input-images")
-OUTPUT_BUCKET = os.getenv("OUTPUT_BUCKET", "output-images")
+# Nombre de las carpetas
+INPUT_FOLDER = os.getenv("INPUT_FOLDER", "input-images")
+OUTPUT_FOLDER = os.getenv("OUTPUT_FOLDER", "output-images")
 
 # ------------------------------------
 # LIFESPAN EVENTS
@@ -26,21 +26,14 @@ async def lifespan(_: FastAPI):
     """Gestiona el ciclo de vida de la aplicación."""
     # STARTUP
     try:
-        # Inicializar MinIO
-        minio_client = get_minio_client()
-        
-        # Verifica y crea los buckets si no existen
-        for bucket in [INPUT_BUCKET, OUTPUT_BUCKET]:
-            if not minio_client.client.bucket_exists(bucket):
-                minio_client.client.make_bucket(bucket)
-                print(f"✅ Bucket '{bucket}' creado.")
-            else:
-                print(f"✅ Bucket '{bucket}' ya existe.")
-        
+        # Inicializar Cloudinary
+        cloudinary_client = get_cloudinary_client()
+        print(f"✅ Cloudinary inicializado correctamente")
+
         # Inicializar RabbitMQ
         rabbitmq_client = get_rabbitmq_client()
         print(f"✅ RabbitMQ inicializado correctamente")
-        
+
     except Exception as e:
         print(f"❌ FATAL: Error al inicializar servicios: {e}")
         raise
@@ -66,29 +59,31 @@ app = FastAPI(lifespan=lifespan)
 # ENDPOINTS
 # ------------------------------------
 
+@app.post("/preview/webhook")
+def webhook_handler(data: dict):
+    """
+    Recibe el webhook con el resultado del procesamiento de tatuajes
+    """
+    print(f"Webhook recibido: {data}")
+    return {"status": "ok"}
+
 @app.get("/")
 def home():
     """Endpoint de health check."""
     try:
-        minio_client = get_minio_client()
+        cloudinary_client = get_cloudinary_client()
         rabbitmq_client = get_rabbitmq_client()
-        
-        # Verificar MinIO
-        input_exists = minio_client.client.bucket_exists(INPUT_BUCKET)
-        output_exists = minio_client.client.bucket_exists(OUTPUT_BUCKET)
-        
+
         # Verificar RabbitMQ
         queue_size = rabbitmq_client.get_queue_size()
-        
+
         return {
             "status": "ok",
             "services": {
-                "minio": {
+                "cloudinary": {
                     "status": "conectado",
-                    "input_bucket": INPUT_BUCKET,
-                    "input_status": "disponible" if input_exists else "no encontrado",
-                    "output_bucket": OUTPUT_BUCKET,
-                    "output_status": "disponible" if output_exists else "no encontrado"
+                    "input_folder": INPUT_FOLDER,
+                    "output_folder": OUTPUT_FOLDER
                 },
                 "rabbitmq": {
                     "status": "conectado",
@@ -107,7 +102,8 @@ def home():
 @app.post("/upload/")
 async def upload_tattoo_images(
     body_image: UploadFile = File(..., description="Imagen del cuerpo con zona roja marcada"),
-    tattoo_image: UploadFile = File(..., description="Imagen del tatuaje (PNG preferiblemente sin fondo)")
+    tattoo_image: UploadFile = File(..., description="Imagen del tatuaje (PNG preferiblemente sin fondo)"),
+    socket_id: Optional[str] = Form(None)
 ):
     """
     Recibe dos imágenes para aplicación de tatuaje con IA:
@@ -126,7 +122,7 @@ async def upload_tattoo_images(
     """
     
     try:
-        minio_client = get_minio_client()
+        cloudinary_client = get_cloudinary_client()
         rabbitmq_client = get_rabbitmq_client()
     except Exception as e:
         raise HTTPException(
@@ -171,26 +167,31 @@ async def upload_tattoo_images(
         body_filename = f"body_{uuid4()}"
         tattoo_filename = f"tattoo_{uuid4()}"
         
-        # Subir imagen del cuerpo a MinIO
+        # Subir imagen del cuerpo a Cloudinary
         print(f"⬆️  Subiendo imagen del cuerpo: {body_filename}")
-        body_upload_result = minio_client.upload_file(
-            bucket_name=INPUT_BUCKET,
-            object_name=body_filename,
+        body_upload_result = cloudinary_client.upload_file(
+            folder=INPUT_FOLDER,
+            public_id=body_filename,
             file_content=body_content,
             content_type=body_image.content_type
         )
-        
-        # Subir imagen del tatuaje a MinIO
+
+        # Subir imagen del tatuaje a Cloudinary
         print(f"⬆️  Subiendo imagen del tatuaje: {tattoo_filename}")
-        tattoo_upload_result = minio_client.upload_file(
-            bucket_name=INPUT_BUCKET,
-            object_name=tattoo_filename,
+        tattoo_upload_result = cloudinary_client.upload_file(
+            folder=INPUT_FOLDER,
+            public_id=tattoo_filename,
             file_content=tattoo_content,
             content_type=tattoo_image.content_type
         )
         
+        # Generar jobId único para esta tarea
+        job_id = str(uuid4())
+
         # Preparar metadata completa para la tarea
         metadata = {
+            "jobId": job_id,
+            "socketId": socket_id,
             "body_image": {
                 "filename": body_filename,
                 "resolution": f"{body_width}x{body_height}",
@@ -213,8 +214,8 @@ async def upload_tattoo_images(
             "task_type": "tattoo_application",
             "body_filename": body_filename,
             "tattoo_filename": tattoo_filename,
-            "input_bucket": INPUT_BUCKET,
-            "output_bucket": OUTPUT_BUCKET,
+            "input_folder": INPUT_FOLDER,
+            "output_folder": OUTPUT_FOLDER,
             "metadata": metadata
         })
         
@@ -230,6 +231,7 @@ async def upload_tattoo_images(
         return {
             "status": "success",
             "message": "Imágenes recibidas y tarea encolada para procesamiento con IA",
+            "jobId": job_id,
             "body_image": {
                 "filename": body_filename,
                 "resolution": f"{body_width}x{body_height}",
@@ -245,8 +247,8 @@ async def upload_tattoo_images(
                 "content_type": tattoo_image.content_type
             },
             "storage": {
-                "input_bucket": INPUT_BUCKET,
-                "output_bucket": OUTPUT_BUCKET,
+                "input_folder": INPUT_FOLDER,
+                "output_folder": OUTPUT_FOLDER,
                 "body_upload_status": body_upload_result,
                 "tattoo_upload_status": tattoo_upload_result
             },
@@ -259,11 +261,6 @@ async def upload_tattoo_images(
         
     except HTTPException:
         raise
-    except S3Error as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al subir a MinIO: {e.message}"
-        )
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -272,18 +269,18 @@ async def upload_tattoo_images(
 
 
 @app.get("/files/")
-def list_files(bucket: str = INPUT_BUCKET, prefix: str = ""):
+def list_files(folder: str = INPUT_FOLDER, prefix: str = ""):
     """
-    Lista todos los archivos en un bucket específico.
-    
-    - **bucket**: Nombre del bucket (input-images u output-images)
+    Lista todos los archivos en una carpeta específica.
+
+    - **folder**: Nombre de la carpeta (input-images u output-images)
     - **prefix**: Filtro opcional por prefijo (ej: "body_", "tattoo_", "result_")
     """
     try:
-        minio_client = get_minio_client()
-        files = minio_client.list_files(bucket, prefix=prefix)
+        cloudinary_client = get_cloudinary_client()
+        files = cloudinary_client.list_files(folder, prefix=prefix)
         return {
-            "bucket": bucket,
+            "folder": folder,
             "prefix": prefix,
             "count": len(files),
             "files": files
@@ -295,30 +292,31 @@ def list_files(bucket: str = INPUT_BUCKET, prefix: str = ""):
         )
 
 
-@app.get("/files/{bucket}/{filename}")
-def get_file_url(bucket: str, filename: str, expires: int = 3600):
+@app.get("/files/{folder}/{filename}")
+def get_file_url(folder: str, filename: str, expires: int = 3600):
     """
     Genera una URL temporal para descargar un archivo.
-    
-    - **bucket**: Nombre del bucket
+
+    - **folder**: Nombre de la carpeta
     - **filename**: Nombre del archivo
     - **expires**: Tiempo de expiración en segundos (default: 3600 = 1 hora)
     """
     try:
-        minio_client = get_minio_client()
-        
+        cloudinary_client = get_cloudinary_client()
+
         # Verificar que el archivo existe
-        if not minio_client.file_exists(bucket, filename):
+        public_id = f"{folder}/{filename}"
+        if not cloudinary_client.file_exists(public_id):
             raise HTTPException(
                 status_code=404,
-                detail=f"Archivo '{filename}' no encontrado en bucket '{bucket}'"
+                detail=f"Archivo '{filename}' no encontrado en carpeta '{folder}'"
             )
-        
-        # Generar URL pre-firmada
-        url = minio_client.get_file_url(bucket, filename, expires=expires)
-        
+
+        # Generar URL firmada
+        url = cloudinary_client.get_file_url(public_id, expires=expires)
+
         return {
-            "bucket": bucket,
+            "folder": folder,
             "filename": filename,
             "url": url,
             "expires_in_seconds": expires
@@ -332,17 +330,18 @@ def get_file_url(bucket: str, filename: str, expires: int = 3600):
         )
 
 
-@app.delete("/files/{bucket}/{filename}")
-def delete_file(bucket: str, filename: str):
+@app.delete("/files/{folder}/{filename}")
+def delete_file(folder: str, filename: str):
     """
-    Elimina un archivo del bucket especificado.
-    
-    - **bucket**: Nombre del bucket
+    Elimina un archivo de la carpeta especificada.
+
+    - **folder**: Nombre de la carpeta
     - **filename**: Nombre del archivo a eliminar
     """
     try:
-        minio_client = get_minio_client()
-        result = minio_client.delete_file(bucket, filename)
+        cloudinary_client = get_cloudinary_client()
+        public_id = f"{folder}/{filename}"
+        result = cloudinary_client.delete_file(public_id)
         return {
             "status": "success",
             "message": result

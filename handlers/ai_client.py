@@ -124,7 +124,7 @@ class AITattooClient:
                     error_msg += f": {str(e)}"
             except:
                 error_msg += f": {e.response.text if e.response else str(e)}"
-            
+
             print(f"❌ {error_msg}")
             raise ValueError(error_msg)
             
