@@ -135,9 +135,17 @@ def process_tattoo_task(message: dict):
         print(f"[3/5] Aplicando tatuaje con Google Gemini AI...")
         print(f"Esto puede tardar 10-30 segundos...")
         
+        # Extraer estilos y colores del mensaje si existen
+        styles = message.get("styles", [])
+        colors = message.get("colors", [])
+        description = message.get("description", "")
+
         result_bytes = ai_client.apply_tattoo_to_body(
             body_image_bytes=body_data,
-            tattoo_image_bytes=tattoo_data
+            tattoo_image_bytes=tattoo_data,
+            styles=styles,
+            colors=colors,
+            description=description
         )
 
         print(f"IA procesó la imagen exitosamente: {len(result_bytes)} bytes")

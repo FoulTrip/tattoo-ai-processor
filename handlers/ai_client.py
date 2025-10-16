@@ -39,7 +39,10 @@ class AITattooClient:
     def apply_tattoo_to_body(
         self,
         body_image_bytes: bytes,
-        tattoo_image_bytes: bytes
+        tattoo_image_bytes: bytes,
+        styles: Optional[list] = None,
+        colors: Optional[list] = None,
+        description: str = "",
     ) -> bytes:
         """
         Aplica un tatuaje a una foto de cuerpo usando IA.
@@ -48,6 +51,9 @@ class AITattooClient:
         Args:
             body_image_bytes: Imagen del cuerpo con zona roja marcada
             tattoo_image_bytes: Imagen del tatuaje (PNG sin fondo)
+            styles: Lista opcional de estilos para personalizar el tatuaje
+            colors: Lista opcional de colores para aplicar al tatuaje
+            description: Descripción opcional del usuario sobre cómo quiere el tatuaje
 
         Returns:
             bytes: Imagen resultante con el tatuaje aplicado de forma hiperrealista
@@ -67,7 +73,7 @@ class AITattooClient:
         body_base64 = self._image_bytes_to_base64(body_image_bytes)
         tattoo_base64 = self._image_bytes_to_base64(tattoo_image_bytes)
         
-        # Prompt optimizado para Reve API
+        # Construir prompt base
         prompt = (
             "Apply the tattoo design from <img>1</img> onto the body in <img>0</img>, "
             "placing it EXACTLY in the RED MARKED AREA. "
@@ -80,6 +86,20 @@ class AITattooClient:
             "- Complete removal of the red marking "
             "Generate a hyperrealistic image showing how this tattoo would naturally look on that body part."
         )
+
+        # Agregar descripción del usuario si se proporciona
+        if description and description.strip():
+            prompt += f" Additional user instructions: {description.strip()}."
+
+        # Agregar estilos si se proporcionan
+        if styles and len(styles) > 0:
+            styles_text = ", ".join(styles)
+            prompt += f" Apply the following styles to the tattoo: {styles_text}."
+
+        # Agregar colores si se proporcionan
+        if colors and len(colors) > 0:
+            colors_text = ", ".join(colors)
+            prompt += f" Use the following colors for the tattoo: {colors_text}."
         
         # Preparar headers
         headers = {

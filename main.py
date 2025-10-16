@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 import os
 from uuid import uuid4
-from typing import Optional
+from typing import Optional, List
+import json
+from pydantic import BaseModel, Field
 
 
 # Cargar variables de entorno
@@ -54,6 +56,14 @@ async def lifespan(_: FastAPI):
 
 # --- Configuración de la Aplicación ---
 app = FastAPI(lifespan=lifespan)
+
+# Modelos Pydantic para la documentación
+class TattooUploadRequest(BaseModel):
+    body_image: UploadFile = Field(..., description="Imagen del cuerpo con zona roja marcada")
+    tattoo_image: UploadFile = Field(..., description="Imagen del tatuaje (PNG preferiblemente sin fondo)")
+    socket_id: Optional[str] = Field(None, description="ID opcional del socket para notificaciones en tiempo real")
+    styles: Optional[List[str]] = Field(None, description="Lista opcional de estilos para personalizar el tatuaje (ej: 'realista', 'minimalista')")
+    colors: Optional[List[str]] = Field(None, description="Lista opcional de colores para aplicar al tatuaje (ej: 'negro', 'rojo')")
 
 # ------------------------------------
 # ENDPOINTS
@@ -103,20 +113,27 @@ def home():
 async def upload_tattoo_images(
     body_image: UploadFile = File(..., description="Imagen del cuerpo con zona roja marcada"),
     tattoo_image: UploadFile = File(..., description="Imagen del tatuaje (PNG preferiblemente sin fondo)"),
-    socket_id: Optional[str] = Form(None)
-):
+    socket_id: Optional[str] = Form(None, description="ID opcional del socket para notificaciones en tiempo real"),
+    styles: Optional[str] = Form(None, description="Lista opcional de estilos para personalizar el tatuaje (ej: 'realista', 'minimalista') - formato JSON"),
+    colors: Optional[str] = Form(None, description="Lista opcional de colores para aplicar al tatuaje (ej: 'negro', 'rojo') - formato JSON"),
+    description: Optional[str] = Form(None, description="Descripción opcional del usuario sobre cómo quiere el tatuaje"),
+) -> dict:
     """
     Recibe dos imágenes para aplicación de tatuaje con IA:
-    
+
     - **body_image**: Foto del cuerpo con la zona roja marcada donde irá el tatuaje
     - **tattoo_image**: Diseño del tatuaje (preferiblemente PNG sin fondo)
-    
+    - **socket_id**: ID opcional del socket para notificaciones en tiempo real
+    - **styles**: Lista opcional de estilos para personalizar el tatuaje (ej: "realista", "minimalista")
+    - **colors**: Lista opcional de colores para aplicar al tatuaje (ej: "negro", "rojo")
+    - **description**: Descripción opcional del usuario sobre cómo quiere el tatuaje
+
     Proceso:
     1. Valida que ambos archivos sean imágenes
     2. Extrae metadata (resolución, formato, tamaño)
     3. Sube ambas imágenes a MinIO (bucket: input-images)
     4. Encola tarea de procesamiento con IA en RabbitMQ
-    
+
     Returns:
         Información detallada de ambas imágenes y confirmación de encolado
     """
@@ -129,6 +146,31 @@ async def upload_tattoo_images(
             status_code=503,
             detail=f"Los servicios no están disponibles: {str(e)}"
         )
+
+    # Parsear parámetros opcionales JSON
+    parsed_styles = []
+    parsed_colors = []
+
+    if styles:
+        try:
+            parsed_styles = json.loads(styles)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="El parámetro 'styles' debe ser una lista JSON válida"
+            )
+
+    if colors:
+        try:
+            parsed_colors = json.loads(colors)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=400,
+                detail="El parámetro 'colors' debe ser una lista JSON válida"
+            )
+
+    # Usar la descripción directamente (es un string)
+    user_description = description or ""
 
     # Validación de tipo de archivo para la imagen del cuerpo
     if not body_image.content_type or not body_image.content_type.startswith('image/'):
@@ -205,7 +247,11 @@ async def upload_tattoo_images(
                 "format": tattoo_format,
                 "size_bytes": tattoo_size,
                 "content_type": tattoo_image.content_type
-            }
+            },
+            "styles": parsed_styles,
+            "colors": parsed_colors,
+            "description": user_description,
+            "description": user_description
         }
         
         # Encolar tarea de procesamiento con IA en RabbitMQ
@@ -216,7 +262,10 @@ async def upload_tattoo_images(
             "tattoo_filename": tattoo_filename,
             "input_folder": INPUT_FOLDER,
             "output_folder": OUTPUT_FOLDER,
-            "metadata": metadata
+            "metadata": metadata,
+            "styles": parsed_styles,
+            "colors": parsed_colors,
+            "description": user_description
         })
         
         if not task_published:
@@ -252,6 +301,8 @@ async def upload_tattoo_images(
                 "body_upload_status": body_upload_result,
                 "tattoo_upload_status": tattoo_upload_result
             },
+            "styles": parsed_styles,
+            "colors": parsed_colors,
             "queue": {
                 "task_queued": task_published,
                 "queue_name": rabbitmq_client.queue_name,
@@ -266,8 +317,7 @@ async def upload_tattoo_images(
             status_code=500,
             detail=f"Error al procesar o subir las imágenes: {str(e)}"
         )
-
-
+        
 @app.get("/files/")
 def list_files(folder: str = INPUT_FOLDER, prefix: str = ""):
     """
@@ -379,7 +429,6 @@ def queue_status():
 def purge_queue():
     """
     Elimina todos los mensajes pendientes de la cola de RabbitMQ.
-    ⚠️ Usar con precaución: esta acción no se puede deshacer.
     """
     try:
         rabbitmq_client = get_rabbitmq_client()
