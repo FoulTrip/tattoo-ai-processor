@@ -1,5 +1,5 @@
 """
-Worker para procesamiento de tatuajes con IA usando Google Gemini.
+Worker para procesamiento de tatuajes con IA usando REVE API.
 Ejecutar con: python worker.py
 """
 
@@ -132,7 +132,7 @@ def process_tattoo_task(message: dict):
         print(f"Imagen del tatuaje descargada: {len(tattoo_data)} bytes")
 
         # Paso 3: Aplicar tatuaje con IA
-        print(f"[3/5] Aplicando tatuaje con Google Gemini AI...")
+        print(f"[3/5] Aplicando tatuaje con REVE AI...")
         print(f"Esto puede tardar 10-30 segundos...")
         
         # Extraer estilos y colores del mensaje si existen
@@ -311,7 +311,7 @@ def main():
     print("\n" + "="*70)
     print("WORKER DE PROCESAMIENTO DE TATUAJES CON IA")
     print("="*70)
-    print("Powered by Google Gemini")
+    print("Powered by REVE")
     print("="*70 + "\n")
     
     try:
@@ -325,7 +325,7 @@ def main():
         print(f"Cloudinary conectado")
 
         ai_client = get_ai_client()
-        print(f"Google Gemini AI conectado")
+        print(f"REVE AI conectado")
 
         print(f"\n{'='*70}")
         print(f"ESPERANDO TAREAS EN LA COLA: '{rabbitmq_client.queue_name}'")

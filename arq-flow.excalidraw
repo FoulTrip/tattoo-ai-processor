@@ -1,7 +1,7 @@
 {
   "type": "excalidraw",
   "version": 2,
-  "source": "https://excalidraw.com",
+  "source": "https://marketplace.visualstudio.com/items?itemName=pomdtr.excalidraw-editor",
   "elements": [
     {
       "type": "text",
@@ -1250,9 +1250,9 @@
     {
       "id": "PyzXEIe7mG5JUjAwlplnw",
       "type": "text",
-      "x": 1791.9535618834116,
+      "x": 1798.3235493712045,
       "y": 285.84029591649676,
-      "width": 63.399932861328125,
+      "width": 50.65995788574219,
       "height": 50,
       "angle": 0,
       "strokeColor": "#1e1e1e",
@@ -1267,20 +1267,20 @@
       "index": "b4X",
       "roundness": null,
       "seed": 595531377,
-      "version": 13,
-      "versionNonce": 282349265,
+      "version": 19,
+      "versionNonce": 792052876,
       "isDeleted": false,
       "boundElements": [],
-      "updated": 1759375645368,
+      "updated": 1760658411605,
       "link": null,
       "locked": false,
-      "text": "Gemini\nAPI",
+      "text": "REVE\nAPI",
       "fontSize": 20,
       "fontFamily": 6,
       "textAlign": "center",
       "verticalAlign": "middle",
       "containerId": "w2v7tDgxQHubBR0eAh3Oi",
-      "originalText": "Gemini\nAPI",
+      "originalText": "REVE\nAPI",
       "autoResize": true,
       "lineHeight": 1.25
     },
@@ -1419,8 +1419,7 @@
     "gridSize": 20,
     "gridStep": 5,
     "gridModeEnabled": false,
-    "viewBackgroundColor": "#ffffff",
-    "lockedMultiSelections": {}
+    "viewBackgroundColor": "#ffffff"
   },
   "files": {}
 }
