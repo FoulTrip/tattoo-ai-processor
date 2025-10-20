@@ -1,6 +1,6 @@
-# Tatto-IA: Aplicación de Tatuajes con Inteligencia Artificial
+# Servicio de Tatuajes con Inteligencia Artificial
 
-Sistema web para aplicar diseños de tatuajes en fotos de cuerpos utilizando Reve API. El proyecto utiliza una arquitectura de microservicios con FastAPI, RabbitMQ para colas de mensajes, Cloudinary para almacenamiento de objetos y un worker que procesa las imágenes con IA.
+Aplicar diseños de tatuajes en fotos de cuerpos utilizando Reve API. Se utiliza una arquitectura de microservicios con FastAPI, RabbitMQ para colas de mensajes, Cloudinary para almacenamiento de objetos y un worker que procesa las imágenes con IA.
 
 ## 🚀 Características
 
@@ -213,15 +213,3 @@ tatto-ia/
 ### Logs de depuración
 - La API muestra logs en la consola
 - El worker muestra logs detallados de procesamiento
-
-## 📄 Licencia
-
-Este proyecto es de código abierto. Consulta el archivo LICENSE para más detalles.
-
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crea una rama para tu feature (`git checkout -b feature/nueva-funcionalidad`)
-3. Commit tus cambios (`git commit -am 'Agrega nueva funcionalidad'`)
-4. Push a la rama (`git push origin feature/nueva-funcionalidad`)
-5. Abre un Pull Request
